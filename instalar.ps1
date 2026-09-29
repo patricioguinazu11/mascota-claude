@@ -68,6 +68,17 @@ $lnk.Save()
 # 5. Abrirla ahora
 Write-Host '4/4 Abriendo la mascota'
 Start-Process -FilePath $lnk.TargetPath -ArgumentList $argumentos -WindowStyle Hidden -WorkingDirectory $destino
+Start-Sleep -Seconds 4
+$viva = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
+    Where-Object { $_.CommandLine -like '*ClaudeMascota*mascota.ps1*' }
+if (-not $viva) {
+    Write-Host ''
+    Write-Host 'La mascota no quedó abierta. Últimas líneas del log:' -ForegroundColor Yellow
+    $log = Join-Path $destino 'mascota.log'
+    if (Test-Path $log) { Get-Content $log -Tail 10 } else { Write-Host '  (no hay log)' }
+    Write-Host 'Mandale esto a Claude para que lo revise.'
+    exit 1
+}
 
 Write-Host ''
 Write-Host 'Listo. La mascota ya debería estar en la esquina inferior derecha.' -ForegroundColor Green

@@ -16,6 +16,16 @@ function Log([string]$msg) {
     try { Add-Content -LiteralPath $archivoLog -Value ("{0:yyyy-MM-dd HH:mm:ss}  {1}" -f (Get-Date), $msg) -Encoding UTF8 } catch { }
 }
 
+# Si algo falla al arrancar, lo anotamos y lo mostramos en vez de morir en silencio.
+trap {
+    Log ("Error fatal: {0} (linea {1})" -f $_, $_.InvocationInfo.ScriptLineNumber)
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        [void][System.Windows.Forms.MessageBox]::Show("La mascota no pudo arrancar:`n`n$_`n`nDetalle en $archivoLog", 'Mascota de Claude Code')
+    } catch { }
+    exit 1
+}
+
 # --- Una sola instancia -----------------------------------------------------------
 $nueva = $false
 $script:mutex = New-Object System.Threading.Mutex($true, 'Local\ClaudeMascota', [ref]$nueva)
@@ -193,14 +203,15 @@ function Revisar-Vencimientos {
 }
 
 # --- Dibujo -----------------------------------------------------------------------
-# El personaje mide 16 x 11 "pixeles" (cada uno de $u x $u). R() dibuja en esas unidades.
-function R([double]$c, [double]$r, [double]$w, [double]$h, $b) {
+# El personaje mide 16 x 11 "pixeles" (cada uno de $u x $u). Pixel dibuja en esas unidades.
+# (No se llama "R" porque en PowerShell "r" es un alias de Invoke-History y le gana a la función.)
+function Pixel([double]$c, [double]$r, [double]$w, [double]$h, $b) {
     $g.FillRectangle($b, [int]($ox + $c * $u), [int]($oy + $r * $u), [int]($w * $u), [int]($h * $u))
 }
 
 function Chispa([double]$c, [double]$r, $b) {
-    R $c ($r - 1) 1 3 $b
-    R ($c - 1) $r 3 1 $b
+    Pixel $c ($r - 1) 1 3 $b
+    Pixel ($c - 1) $r 3 1 $b
 }
 
 function Dibujar-Globo($g) {
@@ -283,35 +294,35 @@ function Dibujar-Personaje($g) {
     # Piernas (columnas 3, 5, 10 y 12)
     foreach ($col in 3, 5, 10, 12) {
         $levantada = ($piernas -eq 'pasoA' -and ($col -eq 3 -or $col -eq 10)) -or ($piernas -eq 'pasoB' -and ($col -eq 5 -or $col -eq 12))
-        if ($baja) { R $col 10 1 1 $bNaranjaOsc }
-        elseif ($levantada) { R $col 9 1 1 $bNaranjaOsc }
-        else { R $col 9 1 2 $bNaranjaOsc }
+        if ($baja) { Pixel $col 10 1 1 $bNaranjaOsc }
+        elseif ($levantada) { Pixel $col 9 1 1 $bNaranjaOsc }
+        else { Pixel $col 9 1 2 $bNaranjaOsc }
     }
 
     # Cuerpo
-    R 2 (2 + $baja) 12 7 $cuerpo
-    R 2 (8 + $baja) 12 1 $bNaranjaOsc
+    Pixel 2 (2 + $baja) 12 7 $cuerpo
+    Pixel 2 (8 + $baja) 12 1 $bNaranjaOsc
 
     # Brazos
     if ($brazos -eq 'arriba') {
-        R 0 (1 + $baja) 2 3 $cuerpo
-        R 14 (1 + $baja) 2 3 $cuerpo
+        Pixel 0 (1 + $baja) 2 3 $cuerpo
+        Pixel 14 (1 + $baja) 2 3 $cuerpo
     } else {
-        R 0 (4 + $baja) 2 2 $cuerpo
-        R 14 (4 + $baja) 2 2 $cuerpo
+        Pixel 0 (4 + $baja) 2 2 $cuerpo
+        Pixel 14 (4 + $baja) 2 2 $cuerpo
     }
 
     # Ojos
     $oj = 4 + $baja
     switch ($ojos) {
-        'normal'   { R 5 $oj 1 2 $bOjos; R 10 $oj 1 2 $bOjos }
-        'izq'      { R 4 $oj 1 2 $bOjos; R 9 $oj 1 2 $bOjos }
-        'der'      { R 6 $oj 1 2 $bOjos; R 11 $oj 1 2 $bOjos }
-        'parpadeo' { R 4 ($oj + 1) 2 1 $bOjos; R 10 ($oj + 1) 2 1 $bOjos }
-        'grandes'  { R 4 $oj 2 2 $bOjos; R 10 $oj 2 2 $bOjos; R 7 ($oj + 2) 2 1 $bOjos }
+        'normal'   { Pixel 5 $oj 1 2 $bOjos; Pixel 10 $oj 1 2 $bOjos }
+        'izq'      { Pixel 4 $oj 1 2 $bOjos; Pixel 9 $oj 1 2 $bOjos }
+        'der'      { Pixel 6 $oj 1 2 $bOjos; Pixel 11 $oj 1 2 $bOjos }
+        'parpadeo' { Pixel 4 ($oj + 1) 2 1 $bOjos; Pixel 10 ($oj + 1) 2 1 $bOjos }
+        'grandes'  { Pixel 4 $oj 2 2 $bOjos; Pixel 10 $oj 2 2 $bOjos; Pixel 7 ($oj + 2) 2 1 $bOjos }
         'felices'  {
-            R 4 ($oj + 1) 1 1 $bOjos; R 5 $oj 1 1 $bOjos; R 6 ($oj + 1) 1 1 $bOjos
-            R 9 ($oj + 1) 1 1 $bOjos; R 10 $oj 1 1 $bOjos; R 11 ($oj + 1) 1 1 $bOjos
+            Pixel 4 ($oj + 1) 1 1 $bOjos; Pixel 5 $oj 1 1 $bOjos; Pixel 6 ($oj + 1) 1 1 $bOjos
+            Pixel 9 ($oj + 1) 1 1 $bOjos; Pixel 10 $oj 1 1 $bOjos; Pixel 11 ($oj + 1) 1 1 $bOjos
         }
     }
 
@@ -322,23 +333,23 @@ function Dibujar-Personaje($g) {
             if ($t -gt 20) {
                 $sub = ($f % 24) / 8.0
                 $zx = 16.5; $zy = 1 - $sub
-                R $zx $zy 2 0.5 $bGris
-                R ($zx + 1) ($zy + 0.5) 0.5 0.5 $bGris
-                R ($zx + 0.5) ($zy + 1) 0.5 0.5 $bGris
-                R $zx ($zy + 1.5) 2 0.5 $bGris
+                Pixel $zx $zy 2 0.5 $bGris
+                Pixel ($zx + 1) ($zy + 0.5) 0.5 0.5 $bGris
+                Pixel ($zx + 0.5) ($zy + 1) 0.5 0.5 $bGris
+                Pixel $zx ($zy + 1.5) 2 0.5 $bGris
             }
         }
         'trabajando' {
             # Puntitos de "pensando" que se van encendiendo
             $n = ($f -shr 2) % 4
-            if ($n -ge 1) { R 13 0 1 1 $bGris }
-            if ($n -ge 2) { R 15 -1 1 1 $bGris }
-            if ($n -ge 3) { R 17 -2 1 1 $bGris }
+            if ($n -ge 1) { Pixel 13 0 1 1 $bGris }
+            if ($n -ge 2) { Pixel 15 -1 1 1 $bGris }
+            if ($n -ge 3) { Pixel 17 -2 1 1 $bGris }
         }
         'aprobacion' {
             # Signo de exclamación al costado de la cabeza
-            R 17 -1 2 3 $bRojo
-            R 17 3 2 1 $bRojo
+            Pixel 17 -1 2 3 $bRojo
+            Pixel 17 3 2 1 $bRojo
         }
         'listo' {
             if ((($f -shr 2) % 2) -eq 0) {
@@ -368,7 +379,7 @@ $script:tooltip = New-Object System.Windows.Forms.ToolTip
 $script:tooltip.SetToolTip($form, 'Claude Code')
 
 $form.Add_Paint({
-    param($sender, $ev)
+    param($origen, $ev)
     try {
         $g = $ev.Graphics
         $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::None
@@ -376,7 +387,7 @@ $form.Add_Paint({
         Dibujar-Personaje $g
         Dibujar-Globo $g
     } catch {
-        if (-not $script:errorDibujo) { Log "Error dibujando: $_"; $script:errorDibujo = $true }
+        if (-not $script:errorDibujo) { Log ("Error dibujando: {0} (linea {1})" -f $_, $_.InvocationInfo.ScriptLineNumber); $script:errorDibujo = $true }
     }
 })
 
@@ -384,7 +395,7 @@ $form.Add_Paint({
 $script:arrastrando = $false
 $script:agarre = $null
 $form.Add_MouseDown({
-    param($sender, $ev)
+    param($origen, $ev)
     if ($ev.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
         $script:arrastrando = $true
         $cur = [System.Windows.Forms.Cursor]::Position
@@ -442,7 +453,7 @@ $timer.Add_Tick({
         if (($script:frame % 50) -eq 0 -and -not $menu.Visible) { $form.TopMost = $true }
         $form.Invalidate()
     } catch {
-        if (-not $script:errorTimer) { Log "Error en timer: $_"; $script:errorTimer = $true }
+        if (-not $script:errorTimer) { Log ("Error en timer: {0} (linea {1})" -f $_, $_.InvocationInfo.ScriptLineNumber); $script:errorTimer = $true }
     }
 })
 
