@@ -1,6 +1,7 @@
 ﻿# hook.ps1 - Lo ejecuta Claude Code en cada evento (UserPromptSubmit, PreToolUse,
-# PostToolUse, Notification, Stop). Lee el JSON que llega por stdin, decide en qué
-# estado tiene que estar la mascota y lo escribe en estado.json.
+# PostToolUse, Notification, Stop, SessionEnd). Recibe el nombre del evento como
+# argumento y el detalle en JSON por stdin, decide en qué estado tiene que estar la
+# mascota y lo escribe en estado.json. Cada llamada queda anotada en hook.log.
 # Nunca debe fallar ni imprimir nada: cualquier error se ignora y sale con 0.
 
 param([string]$Evento = '')
@@ -24,19 +25,37 @@ function NombreArchivo($ti) {
     return ''
 }
 
+$script:logHook = $null
+function LogHook([string]$msg) {
+    if (-not $script:logHook) { return }
+    try {
+        $fi = New-Object IO.FileInfo($script:logHook)
+        if ($fi.Exists -and $fi.Length -gt 200KB) { Move-Item -LiteralPath $script:logHook -Destination "$($script:logHook).old" -Force }
+        Add-Content -LiteralPath $script:logHook -Value ("{0:yyyy-MM-dd HH:mm:ss}  {1}" -f (Get-Date), $msg) -Encoding UTF8
+    } catch { }
+}
+
 try {
     # Por defecto, la carpeta donde está este script (%LOCALAPPDATA%\ClaudeMascota).
     $dir = $PSScriptRoot
     if ($env:CLAUDE_MASCOTA_DIR) { $dir = $env:CLAUDE_MASCOTA_DIR }
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $archivo = Join-Path $dir 'estado.json'
+    $script:logHook = Join-Path $dir 'hook.log'
 
-    $reader = New-Object IO.StreamReader([Console]::OpenStandardInput(), (New-Object Text.UTF8Encoding($false)))
-    $raw = $reader.ReadToEnd()
+    # Leemos stdin con tiempo máximo: si nadie lo cierra, seguimos igual con el
+    # nombre del evento que viene como argumento.
+    $raw = ''
+    try {
+        $reader = New-Object IO.StreamReader([Console]::OpenStandardInput(), (New-Object Text.UTF8Encoding($false)))
+        $lectura = $reader.ReadToEndAsync()
+        if ($lectura.Wait(3000)) { $raw = $lectura.Result } else { LogHook "$Evento  (stdin no llego a tiempo)" }
+    } catch { LogHook "$Evento  (no pude leer stdin: $_)" }
     $d = $null
     try { if ($raw) { $d = $raw | ConvertFrom-Json } } catch { $d = $null }
 
     if ($d -and $d.hook_event_name) { $Evento = [string]$d.hook_event_name }
+    elseif ($Evento) { }
     elseif (-not $Evento -and $raw -match '"hook_event_name"\s*:\s*"([^"]+)"') { $Evento = $Matches[1] }
 
     $herramienta = ''
@@ -86,12 +105,13 @@ try {
                 $estado = 'aprobacion'; $texto = 'Necesito tu respuesta'
             } else {
                 # Otros avisos (auth_success, etc.): no cambian el estado.
+                LogHook "Notification $tipo (ignorada)"
                 exit 0
             }
         }
         'Stop'      { $estado = 'listo'; $texto = "$([char]0xA1)Termin$([char]0xE9)!" }
         'SessionEnd' { $estado = 'esperando'; $texto = "Hasta luego$e" }
-        default { exit 0 }
+        default { LogHook "evento desconocido '$Evento' ($($raw.Length) bytes)"; exit 0 }
     }
 
     $proyecto = ''
@@ -101,7 +121,7 @@ try {
     if (Test-Path $archivo) {
         try {
             $previo = [IO.File]::ReadAllText($archivo) | ConvertFrom-Json
-            if ($previo.ts -and [long]$previo.ts -gt $ts) { exit 0 }
+            if ($previo.ts -and [long]$previo.ts -gt $ts) { LogHook "$Evento  (descartado: hay uno mas nuevo)"; exit 0 }
         } catch { }
     }
 
@@ -117,7 +137,9 @@ try {
     $tmp = "$archivo.$PID.tmp"
     [IO.File]::WriteAllText($tmp, $json, (New-Object Text.UTF8Encoding($false)))
     Move-Item -LiteralPath $tmp -Destination $archivo -Force
+    LogHook "$Evento $herramienta -> $estado '$texto'"
 } catch {
+    LogHook "ERROR en $Evento : $_ (linea $($_.InvocationInfo.ScriptLineNumber))"
     try { if ($tmp -and (Test-Path $tmp)) { Remove-Item $tmp -Force } } catch { }
 }
 exit 0

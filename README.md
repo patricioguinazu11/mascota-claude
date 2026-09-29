@@ -39,6 +39,8 @@ Los hooks que agrega son `UserPromptSubmit`, `PreToolUse`, `PostToolUse` (para s
 
 ## Si algo no anda
 
+Primero hacé doble clic en **`diagnosticar.bat`**: revisa la instalación, los hooks y simula un aviso de Claude Code. Cada llamada de Claude a la mascota queda anotada en `%LOCALAPPDATA%\ClaudeMascota\hook.log`.
+
 - **No cambia de estado:** reiniciá Claude Code y fijate que en `settings.json` estén los hooks que apuntan a `ClaudeMascota/hook.ps1`.
 - **No aparece:** abrila a mano con `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\ClaudeMascota\mascota.ps1"` y mirá si hay errores en `%LOCALAPPDATA%\ClaudeMascota\mascota.log`.
 - **Quedó en un estado viejo** (por ejemplo, si cortaste a Claude con Esc): vuelve sola a "esperando" a los pocos minutos, o con el próximo mensaje que le mandes.

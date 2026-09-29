@@ -1,7 +1,7 @@
 ﻿# configurar-hooks.ps1 - Agrega o quita los hooks de la mascota en el settings.json
 # de usuario de Claude Code, SIN tocar el resto de la configuración.
 #
-#   -Accion Agregar -Comando "<comando del hook>"
+#   -Accion Agregar -Comando "<comando del hook>"   (se le agrega el nombre del evento al final)
 #   -Accion Quitar
 #
 # Solo se consideran "de la mascota" los hooks cuyo comando apunta a ClaudeMascota\hook.ps1.
@@ -144,7 +144,7 @@ if ($Accion -eq 'Agregar') {
     if (-not $cfg.Contains('hooks') -or -not ($cfg['hooks'] -is [System.Collections.IDictionary])) { $cfg['hooks'] = [ordered]@{} }
     $hooks = $cfg['hooks']
     foreach ($ev in $eventos.Keys) {
-        $entrada = [ordered]@{ type = 'command'; command = $Comando; async = $true }
+        $entrada = [ordered]@{ type = 'command'; command = "$Comando $ev"; async = $true }
         $grupo = [ordered]@{}
         if ($eventos[$ev]) { $grupo['matcher'] = '*' }
         $grupo['hooks'] = New-Object System.Collections.ArrayList
