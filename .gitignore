@@ -1,0 +1,5 @@
+# Archivos que genera la mascota si se prueba desde el repo
+src/estado.json
+src/config.json
+src/mascota.log
+*.tmp
