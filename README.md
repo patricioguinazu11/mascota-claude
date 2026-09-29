@@ -9,12 +9,9 @@ Funciona solo con Windows PowerShell y .NET, que ya vienen con Windows, así que
 ## Instalación
 
 1. Bajá el repositorio a tu PC: en GitHub, **Code → Download ZIP** y descomprimilo, o `git clone https://github.com/patricioguinazu11/mascota-claude.git`.
-2. Abrí PowerShell en esa carpeta (en el Explorador: clic derecho en un espacio vacío → *Abrir en Terminal*).
-3. Ejecutá:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\instalar.ps1
-   ```
-4. Si tenías Claude Code abierto, cerralo y volvelo a abrir para que tome los hooks.
+2. Hacé doble clic en **`instalar.bat`**. Si Windows muestra "Windows protegió su PC", tocá *Más información → Ejecutar de todas formas*.
+   (Alternativa desde PowerShell: `powershell -ExecutionPolicy Bypass -File .\instalar.ps1`.)
+3. Si tenías Claude Code abierto, cerralo y volvelo a abrir para que tome los hooks.
 
 La mascota aparece abajo a la derecha y a partir de ahí arranca sola cada vez que prendés la PC.
 
@@ -26,11 +23,7 @@ La mascota aparece abajo a la derecha y a partir de ahí arranca sola cada vez q
 
 ## Desinstalación
 
-Desde la carpeta del repositorio:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\desinstalar.ps1
-```
+Doble clic en **`desinstalar.bat`** (o `powershell -ExecutionPolicy Bypass -File .\desinstalar.ps1`).
 
 También queda una copia en `%LOCALAPPDATA%\ClaudeMascota\desinstalar.ps1`. Cierra la mascota, quita solo sus hooks del `settings.json`, borra el acceso directo de Inicio y la carpeta instalada.
 
