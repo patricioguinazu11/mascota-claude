@@ -153,7 +153,8 @@ if (Test-Path $archivoPol) { $politicas += [pscustomobject]@{ Origen = $archivoP
 $dirPol = Join-Path $env:ProgramFiles 'ClaudeCode\managed-settings.d'
 if (Test-Path $dirPol) { Get-ChildItem $dirPol -Filter *.json | ForEach-Object { $politicas += [pscustomobject]@{ Origen = $_.FullName; Texto = (Get-Content $_.FullName -Raw) } } }
 foreach ($clave in 'HKLM:\SOFTWARE\Policies\ClaudeCode', 'HKCU:\SOFTWARE\Policies\ClaudeCode') {
-    try { $v = (Get-ItemProperty -Path $clave -Name Settings -ErrorAction Stop).Settings; if ($v) { $politicas += [pscustomobject]@{ Origen = "$clave\Settings"; Texto = [string]$v } } } catch { }
+    if (-not (Test-Path $clave)) { continue }
+    try { $v = (Get-ItemProperty -Path $clave -Name Settings -ErrorAction SilentlyContinue).Settings; if ($v) { $politicas += [pscustomobject]@{ Origen = "$clave\Settings"; Texto = [string]$v } } } catch { }
 }
 if (-not $politicas) {
     Ok 'No hay políticas de Claude Code en este equipo (archivo ni registro).'
