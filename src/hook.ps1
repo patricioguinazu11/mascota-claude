@@ -122,6 +122,11 @@ try {
         try {
             $previo = [IO.File]::ReadAllText($archivo) | ConvertFrom-Json
             if ($previo.ts -and [long]$previo.ts -gt $ts) { LogHook "$Evento  (descartado: hay uno mas nuevo)"; exit 0 }
+            # Los avisos de herramientas corren en segundo plano y pueden llegar después
+            # del "Terminé". Después de Stop, solo un pedido nuevo cambia el estado.
+            if ($previo.evento -in 'Stop', 'SessionEnd' -and $Evento -in 'PreToolUse', 'PostToolUse') {
+                LogHook "$Evento $herramienta  (descartado: llego despues de $($previo.evento))"; exit 0
+            }
         } catch { }
     }
 
