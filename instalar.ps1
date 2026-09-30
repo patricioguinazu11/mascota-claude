@@ -46,12 +46,11 @@ foreach ($f in 'mascota.ps1', 'hook.ps1', 'configurar-hooks.ps1') {
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'desinstalar.ps1') -Destination $destino -Force
 Get-ChildItem -LiteralPath $destino -Filter *.ps1 | Unblock-File
+Set-Content -LiteralPath (Join-Path $destino 'instalado.txt') -Value (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') -Encoding UTF8
 
 # 3. Hooks en settings.json
 Write-Host "2/4 Configurando hooks en $settings"
-$rutaHook = (Join-Path $destino 'hook.ps1') -replace '\\', '/'
-$comando = "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$rutaHook`""
-& (Join-Path $destino 'configurar-hooks.ps1') -Accion Agregar -Comando $comando -Settings $settings
+& (Join-Path $destino 'configurar-hooks.ps1') -Accion Agregar -RutaHook (Join-Path $destino 'hook.ps1') -Settings $settings
 
 # 4. Arranque automático con Windows
 Write-Host '3/4 Creando acceso directo en Inicio (arranca sola con Windows)'

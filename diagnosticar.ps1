@@ -49,7 +49,7 @@ if ($procs) {
         $inicio = $p.CreationDate
         Info ("Proceso Claude abierto desde {0:HH:mm:ss}: {1}" -f $inicio, $p.Name)
     }
-    $inst = (Get-Item (Join-Path $destino 'hook.ps1') -ErrorAction SilentlyContinue).LastWriteTime
+    $inst = (Get-Item (Join-Path $destino 'instalado.txt') -ErrorAction SilentlyContinue).LastWriteTime
     if ($inst -and ($procs | Where-Object { $_.CreationDate -lt $inst })) {
         Mal 'Hay una sesión de Claude Code abierta ANTES de instalar: cerrala y abrila de nuevo.'
     }
@@ -66,12 +66,17 @@ if (-not (Test-Path $settings)) {
         foreach ($ev in 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SessionEnd') {
             $cmd = $null
             foreach ($grupo in @($cfg.hooks.$ev)) {
-                foreach ($h in @($grupo.hooks)) { if ([string]$h.command -match $marca) { $cmd = [string]$h.command } }
+                foreach ($h in @($grupo.hooks)) {
+                    if (([string]$h.command + ' ' + (@($h.args) -join ' ')) -match $marca) { $cmd = $h }
+                }
             }
-            if ($cmd) { Ok "$ev configurado"; $comandos[$ev] = $cmd } else { Mal "$ev NO tiene el hook de la mascota" }
+            if ($cmd) {
+                $formato = if ($cmd.args) { 'formato nuevo' } else { 'formato VIEJO: volvé a ejecutar instalar.bat' }
+                Ok "$ev configurado ($formato)"; $comandos[$ev] = $cmd
+            } else { Mal "$ev NO tiene el hook de la mascota" }
         }
         if ($cfg.disableAllHooks) { Mal 'settings.json tiene "disableAllHooks": true, así que ningún hook corre' }
-        if ($comandos['PreToolUse']) { Info "Comando: $($comandos['PreToolUse'])" }
+        if ($comandos['PreToolUse']) { Info ("Comando: {0} {1}" -f $comandos['PreToolUse'].command, (@($comandos['PreToolUse'].args) -join ' ')) }
     } catch {
         Mal "settings.json tiene un error de formato: $_"
     }
@@ -116,10 +121,15 @@ function Probar-Hook([string]$exe, [string[]]$argumentos, [string]$nombre) {
     }
 }
 
-$cmd = $comandos['PreToolUse']
-if (-not $cmd) {
+$h = $comandos['PreToolUse']
+if (-not $h) {
     Mal 'No hay comando de hook para probar.'
+} elseif ($h.args) {
+    # Forma exec: Claude Code ejecuta el programa con estos argumentos, sin consola de por medio.
+    $args2 = foreach ($a in @($h.args)) { if ($a -match '\s') { "`"$a`"" } else { $a } }
+    Probar-Hook ([string]$h.command) @($args2) 'Como lo ejecuta Claude Code'
 } else {
+    $cmd = [string]$h.command
     # Claude Code en Windows ejecuta los hooks con Git Bash (o con PowerShell si no hay Git Bash).
     $bash = $null
     foreach ($c in @($env:CLAUDE_CODE_GIT_BASH_PATH, "$env:ProgramFiles\Git\bin\bash.exe", "${env:ProgramFiles(x86)}\Git\bin\bash.exe", "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe")) {

@@ -59,6 +59,9 @@ public class MascotaForm : Form {
 '@
 
 [void][MascotaNativo]::SetProcessDPIAware()
+# Un error inesperado en un evento de la ventana se anota en el log en vez de cerrarla.
+[System.Windows.Forms.Application]::SetUnhandledExceptionMode([System.Windows.Forms.UnhandledExceptionMode]::CatchException)
+[System.Windows.Forms.Application]::add_ThreadException({ param($o, $ev) Log "Error no controlado: $($ev.Exception.Message)" })
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 # --- Escala según DPI -------------------------------------------------------------
@@ -458,6 +461,8 @@ $timer.Add_Tick({
 })
 
 $form.Add_FormClosing({
+    param($o, $ev)
+    Log "Mascota cerrada ($($ev.CloseReason))"
     $timer.Stop()
     Guardar-Config
 })

@@ -1,15 +1,19 @@
 ﻿# configurar-hooks.ps1 - Agrega o quita los hooks de la mascota en el settings.json
 # de usuario de Claude Code, SIN tocar el resto de la configuración.
 #
-#   -Accion Agregar -Comando "<comando del hook>"   (se le agrega el nombre del evento al final)
+#   -Accion Agregar -RutaHook "C:\...\ClaudeMascota\hook.ps1"
 #   -Accion Quitar
+#
+# Los hooks se declaran en "forma exec" (command + args): Claude Code ejecuta
+# powershell.exe directamente, sin pasar por una consola, así las rutas con
+# caracteres como la ñ llegan intactas.
 #
 # Solo se consideran "de la mascota" los hooks cuyo comando apunta a ClaudeMascota\hook.ps1.
 # Antes de escribir se guarda una copia: settings.json.bak-mascota-AAAAMMDD-HHMMSS
 
 param(
     [Parameter(Mandatory = $true)][ValidateSet('Agregar', 'Quitar')][string]$Accion,
-    [string]$Comando,
+    [string]$RutaHook,
     [string]$Settings = (Join-Path $env:USERPROFILE '.claude\settings.json')
 )
 
@@ -102,7 +106,8 @@ function Quitar-Nuestros($cfg) {
             }
             $lista = New-Object System.Collections.ArrayList
             foreach ($h in $grupo['hooks']) {
-                if ($h -is [System.Collections.IDictionary] -and ([string]$h['command']) -match $marca) { $quitados++ }
+                $cmdTexto = if ($h -is [System.Collections.IDictionary]) { ([string]$h['command']) + ' ' + (@($h['args']) -join ' ') } else { '' }
+                if ($cmdTexto -match $marca) { $quitados++ }
                 else { [void]$lista.Add($h) }
             }
             if ($lista.Count -gt 0 -or $grupo['hooks'].Count -eq 0) {
@@ -140,11 +145,13 @@ if ($texto.Trim()) {
 $quitados = Quitar-Nuestros $cfg
 
 if ($Accion -eq 'Agregar') {
-    if (-not $Comando) { throw 'Falta -Comando.' }
+    if (-not $RutaHook) { throw 'Falta -RutaHook.' }
     if (-not $cfg.Contains('hooks') -or -not ($cfg['hooks'] -is [System.Collections.IDictionary])) { $cfg['hooks'] = [ordered]@{} }
     $hooks = $cfg['hooks']
     foreach ($ev in $eventos.Keys) {
-        $entrada = [ordered]@{ type = 'command'; command = "$Comando $ev"; async = $true }
+        $argumentos = New-Object System.Collections.ArrayList
+        foreach ($a in '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $RutaHook, $ev) { [void]$argumentos.Add($a) }
+        $entrada = [ordered]@{ type = 'command'; command = 'powershell.exe'; args = $argumentos; async = $true }
         $grupo = [ordered]@{}
         if ($eventos[$ev]) { $grupo['matcher'] = '*' }
         $grupo['hooks'] = New-Object System.Collections.ArrayList
