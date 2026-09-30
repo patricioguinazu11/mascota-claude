@@ -1,9 +1,10 @@
 ﻿# mascota.ps1 - Mascota de escritorio que muestra qué está haciendo Claude Code.
 # Solo usa Windows PowerShell 5.1 + .NET Framework (WinForms/GDI+), que ya vienen con Windows.
 #
-# Lee estado.json (lo escribe hook.ps1 desde los hooks de Claude Code) y anima un
-# personaje pixel-art con 4 estados: esperando, trabajando, aprobacion y listo.
-# Arrastrala con el botón izquierdo; clic derecho para el menú (sonido / cerrar).
+# Lee estado.json (lo escribe hook.ps1 desde los hooks de Claude Code) y anima una
+# bestia pixel-art con 4 estados: esperando, trabajando, aprobacion y listo.
+# Camina por la pantalla, se puede arrastrar, un clic le da mimos, doble clic trae
+# la ventana de Claude Code al frente y el clic derecho abre el menú.
 
 $ErrorActionPreference = 'Stop'
 
@@ -41,6 +42,9 @@ using System.Windows.Forms;
 
 public static class MascotaNativo {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
 }
 
 public class MascotaForm : Form {
@@ -70,17 +74,14 @@ $s = [Math]::Max(1.0, $gTmp.DpiX / 96.0)
 $gTmp.Dispose()
 
 $W = [int](240 * $s)          # ancho de la ventana
-$H = [int](115 * $s)          # alto de la ventana
-$u = [int][Math]::Max(3, [Math]::Round(5 * $s))   # tamaño de un "pixel" del personaje
+$H = [int](140 * $s)          # alto de la ventana
+$u = [int][Math]::Max(2, [Math]::Round(3 * $s))   # tamaño de un "pixel" del personaje
 
 # --- Colores ----------------------------------------------------------------------
 function Pincel([string]$hex) { New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml($hex)) }
 $colorClave  = [System.Drawing.Color]::FromArgb(255, 255, 0, 254)   # se vuelve transparente
-$bNaranja    = Pincel '#D97757'
-$bNaranjaCl  = Pincel '#F2A477'
-$bNaranjaOsc = Pincel '#B95F42'
-$bOjos       = Pincel '#2B2B2B'
 $bRojo       = Pincel '#E5443A'
+$bRosa       = Pincel '#E5577A'
 $bVerde      = Pincel '#3DBB5B'
 $bAmarillo   = Pincel '#FFC933'
 $bGris       = Pincel '#9A9A9A'
@@ -94,6 +95,143 @@ $formatoTexto.Alignment     = [System.Drawing.StringAlignment]::Center
 $formatoTexto.LineAlignment = [System.Drawing.StringAlignment]::Center
 $formatoTexto.Trimming      = [System.Drawing.StringTrimming]::EllipsisCharacter
 $formatoTexto.FormatFlags   = [System.Drawing.StringFormatFlags]::NoWrap
+
+# --- Personaje: la bestia -----------------------------------------------------------
+# Dibujo pixel-art mirando a la derecha (cuando camina a la izquierda se espeja), con
+# tres cuadros para caminar. Cada letra es un color; para cambiar el diseño alcanza con
+# editar este dibujo:
+#   K contorno   A/G/D cuerpo (luz, medio, sombra)   F manchas   L/Q panza y mandíbula
+#   S/R cuero de la silla   B/V manta   Y ribete   H/J cuernos, colmillo y uñas
+#   W/U/E ojo (brillo, arriba, abajo)   T dientes   M/N boca (se ven cuando la abre)   . nada
+$arte = @'
+[parado]
+........................KK....................
+...............KKKKKKKKKSK.........H....H.....
+............KKKSSSSSSSSSSAK.......H....H......
+..........KKVVSSSSSSSSSSSVVKK....HJ....H......
+.........KAYBBBBBBBBBBBBBBBBYK...HJ...HJ......
+........KAGYBBBBBBBBBBBBBBBBYAK..JAKKKJ.......
+.......KAGGYBBBBBBBBBBBBBBBBYGAKKAAAAAAK......
+...KK.KAGGGGYYYYYYYYYYYYYYYGGGGAAGGGGGAAK.....
+..KAAKAGGFFGGGGGGGGGGGGGFGGGGGGFFGGGFFFFAK....
+..KGGAGGGFGGGGGGGGGGGGGGGGGGGGGFGGGGGWUGGAKK..
+...KGGGGGGGGGGGGGGGGGGGGGGGGFFGGGGGGGEEGGGAAK.
+...KGGFFGGGGGGFFGGGGGGGGGGGGFGGGGGGGGGGGGGGGK.
+....KDFDDDDDDDFDDDDDDDDDDDDDDGGGGGGGGGGGGGGGFH
+.....KDDDDDDDDDDDDFFDDDDDDDDDDGGGGGGGGGGGGGGH.
+......KLLLLLLLLLLLLLLLLLLLLLLLLGGGGGGGGGGGGGH.
+.......KLLLLLLLLLLLLLLLLLLLLLLLKLGGGMTMMTMMJ..
+.......KGLLLLLLLLLLLLLLLLLLLLLK.KQQNNNNNNNNK..
+.......KGGDKKQQQQQKKKKKKKKQQGDK.KLLLLLLLLLLK..
+.......KGGDK.KGGDK........KGGDK.KGQQQQQQKKK...
+.......KGGDK.KGGDK........KGGDK.KGGDKKKK......
+.......KGGDK.KGGDK........KGGDK.KGGDK.........
+.......KGGDK.KGGDK........KGGDK.KGGDK.........
+.......KGGDK.KGGDK........KGGDK.KGGDK.........
+.......HKHKH.HKHKH........HKHKH.HKHKH.........
+[paso_a]
+........................KK....................
+...............KKKKKKKKKSK.........H....H.....
+............KKKSSSSSSSSSSAK.......H....H......
+..........KKVVSSSSSSSSSSSVVKK....HJ....H......
+.........KAYBBBBBBBBBBBBBBBBYK...HJ...HJ......
+........KAGYBBBBBBBBBBBBBBBBYAK..JAKKKJ.......
+.......KAGGYBBBBBBBBBBBBBBBBYGAKKAAAAAAK......
+...KK.KAGGGGYYYYYYYYYYYYYYYGGGGAAGGGGGAAK.....
+..KAAKAGGFFGGGGGGGGGGGGGFGGGGGGFFGGGFFFFAK....
+..KGGAGGGFGGGGGGGGGGGGGGGGGGGGGFGGGGGWUGGAKK..
+...KGGGGGGGGGGGGGGGGGGGGGGGGFFGGGGGGGEEGGGAAK.
+...KGGFFGGGGGGFFGGGGGGGGGGGGFGGGGGGGGGGGGGGGK.
+....KDFDDDDDDDFDDDDDDDDDDDDDDGGGGGGGGGGGGGGGFH
+.....KDDDDDDDDDDDDFFDDDDDDDDDDGGGGGGGGGGGGGGH.
+......KLLLLLLLLLLLLLLLLLLLLLLLLGGGGGGGGGGGGGH.
+......KLLLLLLLLLLLLLLLLLLLLLLLLKKGGGMTMMTMMJ..
+......KGGLLKLLLLLLLLLLLLLLLLLLK..KQNNNNNNNNK..
+......KGGDK.KKQQQQQKKKKKKQQQDK...KLLLLLLLLLK..
+......KGGDK...KGGDK......KGGDK...KQQQQQQKKK...
+......KGGDK...KGGDK......KGGDK...KGGDQKK......
+......KGGDK...KGGDK......KGGDK...KGGDK........
+......KGGDK...KGGDK......KGGDK...KGGDK........
+......HKHKH...KGGDK......KGGDK...HKHKH........
+..............HKHKH......HKHKH................
+[paso_b]
+........................KK....................
+...............KKKKKKKKKSK.........H....H.....
+............KKKSSSSSSSSSSAK.......H....H......
+..........KKVVSSSSSSSSSSSVVKK....HJ....H......
+.........KAYBBBBBBBBBBBBBBBBYK...HJ...HJ......
+........KAGYBBBBBBBBBBBBBBBBYAK..JAKKKJ.......
+.......KAGGYBBBBBBBBBBBBBBBBYGAKKAAAAAAK......
+...KK.KAGGGGYYYYYYYYYYYYYYYGGGGAAGGGGGAAK.....
+..KAAKAGGFFGGGGGGGGGGGGGFGGGGGGFFGGGFFFFAK....
+..KGGAGGGFGGGGGGGGGGGGGGGGGGGGGFGGGGGWUGGAKK..
+...KGGGGGGGGGGGGGGGGGGGGGGGGFFGGGGGGGEEGGGAAK.
+...KGGFFGGGGGGFFGGGGGGGGGGGGFGGGGGGGGGGGGGGGK.
+....KDFDDDDDDDFDDDDDDDDDDDDDDGGGGGGGGGGGGGGGFH
+.....KDDDDDDDDDDDDFFDDDDDDDDDDGGGGGGGGGGGGGGH.
+......KLLLLLLLLLLLLLLLLLLLLLLLLGGGGGGGGGGGGGH.
+.......KLLLLLLLLLLLLLLLLLLLLLLLLLGGGMTMMTMMJ..
+........KLLLLLLLLLLLLLLLLLLLLLLKGQQNNNNNNNNK..
+........KGGDQQQQQKKKKKKKKKKQGGDKGLLLLLLLLLLK..
+........KGGDKGGDK..........KGGDKGGQQKQQQKKK...
+........KGGDKGGDK..........KGGDKGGDK.KKK......
+........KGGDKGGDK..........KGGDKGGDK..........
+........KGGDKGGDK..........KGGDKGGDK..........
+........KGGDHKHKH..........HKHKHGGDK..........
+........HKHKH..................HKHKH..........
+'@
+$script:partes = @{}
+$parte = $null
+foreach ($linea in ($arte -split "`r?`n")) {
+    if ($linea -match '^\[(\w+)\]$') { $parte = $Matches[1]; $script:partes[$parte] = New-Object System.Collections.ArrayList; continue }
+    if ($parte -and $linea.Trim()) { [void]$script:partes[$parte].Add($linea.TrimEnd()) }
+}
+$ANCHO = [int](@($script:partes['parado']) | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
+$ALTO = $script:partes['parado'].Count
+
+$script:pinceles = @{}
+$coloresArte = @{ K = '#232818'; A = '#9BAB80'; G = '#7C8C66'; D = '#5E6D4A'; F = '#4E5C3C'; L = '#BDC29B'
+                  Q = '#9CA47E'; S = '#6B4A2E'; R = '#8E6843'; B = '#584C83'; V = '#7A6DAE'; Y = '#D8B652'
+                  H = '#F0E8D0'; J = '#C4B894'; E = '#141414'; W = '#FFFFFF'; P = '#B5535A'; O = '#8E3B44'
+                  C = '#A3B585' }
+foreach ($k in $coloresArte.Keys) { $script:pinceles[$k] = Pincel $coloresArte[$k] }
+
+# Traduce una letra del dibujo al color final según ojos y boca.
+function Letra-Final([string]$ch, [string]$ojo, [bool]$boca, [bool]$claro) {
+    switch -CaseSensitive ($ch) {
+        'E' { if ($ojo -eq 'abierto') { return 'E' } else { return 'F' } }
+        'U' { if ($ojo -eq 'abierto') { return 'E' } else { return 'G' } }
+        'W' { if ($ojo -eq 'abierto') { return 'W' } else { return 'G' } }
+        'T' { if ($boca) { return 'H' } else { return 'K' } }
+        'M' { if ($boca) { return 'P' } else { return 'K' } }
+        'N' { if ($boca) { return 'O' } else { return 'Q' } }
+        'G' { if ($claro) { return 'C' } else { return 'G' } }
+        default { return $ch }
+    }
+}
+
+# Arma (y guarda) la lista de rectángulos de cada variante del dibujo.
+$script:sprites = @{}
+function Sprite([string]$patas, [string]$ojo, [bool]$boca, [bool]$claro) {
+    $clave = "$patas|$ojo|$boca|$claro"
+    if (-not $script:sprites.ContainsKey($clave)) {
+        $filas = @($script:partes[$patas])
+        $lista = New-Object System.Collections.ArrayList
+        for ($fila = 0; $fila -lt $filas.Count; $fila++) {
+            $letras = foreach ($ch in $filas[$fila].ToCharArray()) { Letra-Final ([string]$ch) $ojo $boca $claro }
+            $letras = @($letras)
+            $col = 0
+            while ($col -lt $letras.Count) {
+                $fin = $col + 1
+                while ($fin -lt $letras.Count -and $letras[$fin] -ceq $letras[$col]) { $fin++ }
+                if ($letras[$col] -ne '.') { [void]$lista.Add(@($col, $fila, ($fin - $col), $script:pinceles[$letras[$col]])) }
+                $col = $fin
+            }
+        }
+        $script:sprites[$clave] = $lista
+    }
+    return , $script:sprites[$clave]
+}
 
 # --- Sonido corto (generado en memoria, "din-don") --------------------------------
 function Crear-Sonido {
@@ -124,13 +262,14 @@ $script:sonido = $null
 try { $script:sonido = Crear-Sonido; $script:sonido.Load() } catch { Log "Sin sonido: $_" }
 
 # --- Configuración (posición y sonido) --------------------------------------------
-$script:config = [pscustomobject]@{ x = $null; y = $null; sonido = $true }
+$script:config = [pscustomobject]@{ x = $null; y = $null; sonido = $true; caminar = $true }
 if (Test-Path $archivoConfig) {
     try {
         $c = [IO.File]::ReadAllText($archivoConfig) | ConvertFrom-Json
         if ($null -ne $c.x) { $script:config.x = [int]$c.x }
         if ($null -ne $c.y) { $script:config.y = [int]$c.y }
         if ($null -ne $c.sonido) { $script:config.sonido = [bool]$c.sonido }
+        if ($null -ne $c.caminar) { $script:config.caminar = [bool]$c.caminar }
     } catch { Log "config.json inválido: $_" }
 }
 
@@ -163,6 +302,14 @@ $script:ultimoTs = [long]0
 $script:desde = [DateTime]::Now      # cuándo empezó el estado actual
 $script:frame = 0
 $script:inicioFrame = 0
+$script:dir = -1            # hacia dónde camina: 1 derecha, -1 izquierda
+$script:espejo = $true      # el dibujo mira a la derecha; se espeja al ir a la izquierda
+$script:moviendo = $false
+$script:paseo = 0           # cuadros que le quedan caminando cuando pasea
+$script:descanso = 30       # cuadros que le quedan quieta cuando pasea
+$script:dormido = $false
+$script:mimos = 0           # cuadros que le quedan de la reacción a un clic
+$script:rnd = New-Object System.Random
 
 function Poner-Estado([string]$nuevo, [string]$txt) {
     $anterior = $script:estado
@@ -206,15 +353,26 @@ function Revisar-Vencimientos {
 }
 
 # --- Dibujo -----------------------------------------------------------------------
-# El personaje mide 16 x 11 "pixeles" (cada uno de $u x $u). Pixel dibuja en esas unidades.
+# El personaje mide $ANCHO x $ALTO "pixeles" (cada uno de $u x $u). Pixel dibuja en esas
+# unidades y espeja todo cuando la bestia mira a la izquierda.
 # (No se llama "R" porque en PowerShell "r" es un alias de Invoke-History y le gana a la función.)
 function Pixel([double]$c, [double]$r, [double]$w, [double]$h, $b) {
+    if ($script:espejo) { $c = $ANCHO - $c - $w }
     $g.FillRectangle($b, [int]($ox + $c * $u), [int]($oy + $r * $u), [int]($w * $u), [int]($h * $u))
 }
 
 function Chispa([double]$c, [double]$r, $b) {
     Pixel $c ($r - 1) 1 3 $b
     Pixel ($c - 1) $r 3 1 $b
+}
+
+function Corazon([double]$c, [double]$r, $b) {
+    $forma = '.X.X.', 'XXXXX', '.XXX.', '..X..'
+    for ($i = 0; $i -lt 4; $i++) {
+        for ($j = 0; $j -lt 5; $j++) {
+            if ($forma[$i][$j] -eq 'X') { Pixel ($c + $j * 0.75) ($r + $i * 0.75) 0.75 0.75 $b }
+        }
+    }
 }
 
 function Dibujar-Globo($g) {
@@ -256,86 +414,50 @@ function Dibujar-Globo($g) {
 
 function Dibujar-Personaje($g) {
     $f = $script:frame
-    $t = $f - $script:inicioFrame        # frames desde que empezó el estado
+    $t = $f - $script:inicioFrame        # cuadros desde que empezó el estado
+    $saltos = 0, -1, -2, -3, -3, -2, -1, 0
     $dy = 0                              # salto (en unidades, negativo = arriba)
-    $baja = 0                            # "respiración": el cuerpo baja 1 unidad
-    $ojos = 'normal'
-    $brazos = 'afuera'
-    $piernas = 'parado'
-    $cuerpo = $bNaranja
+    $ojo = 'abierto'
+    $boca = $false
+    $claro = $false
+    $patas = 'parado'
+    if ($script:moviendo -or ($script:estado -eq 'trabajando' -and -not $script:config.caminar)) {
+        $patas = if ((($f -shr 1) % 2) -eq 0) { 'paso_a' } else { 'paso_b' }
+    }
 
     switch ($script:estado) {
-        'esperando' {
-            if (($f % 30) -ge 15) { $baja = 1 }
-            if (($f % 40) -lt 2) { $ojos = 'parpadeo' }
-        }
-        'trabajando' {
-            $piernas = if ((($f -shr 1) % 2) -eq 0) { 'pasoA' } else { 'pasoB' }
-            $ojos = if ((($f -shr 3) % 2) -eq 0) { 'izq' } else { 'der' }
-            if (($f % 30) -lt 2) { $ojos = 'parpadeo' }
-        }
+        'esperando'  { if ($script:dormido -or ($f % 40) -lt 2) { $ojo = 'cerrado' } }
+        'trabajando' { if (($f % 30) -lt 2) { $ojo = 'cerrado' } }
         'aprobacion' {
-            $saltos = 0, -1, -2, -3, -3, -2, -1, 0
             $dy = $saltos[$f % 8]
-            $brazos = if ((($f -shr 1) % 2) -eq 0) { 'arriba' } else { 'afuera' }
-            $ojos = 'grandes'
-            if ((($f / 3) % 2) -ge 1) { $cuerpo = $bNaranjaCl }
+            $boca = $true
+            if ((($f / 3) % 2) -ge 1) { $claro = $true }
         }
         'listo' {
-            $ojos = 'felices'
-            if ($t -lt 8) { $saltos = 0, -1, -2, -3, -3, -2, -1, 0; $dy = $saltos[$t] }
-            if ($t -lt 14) { $brazos = 'arriba' }
-            elseif (($f % 30) -ge 15) { $baja = 1 }
+            $ojo = 'cerrado'; $boca = $true
+            if ($t -lt 8) { $dy = $saltos[$t] }
         }
+    }
+    if ($script:mimos -gt 0) {
+        $ojo = 'cerrado'; $boca = $true
+        $k = 15 - $script:mimos
+        if ($k -lt 8) { $dy = $saltos[$k] }
     }
 
     # Origen del personaje (abajo al centro de la ventana)
-    $script:ox = [int](($W - 16 * $u) / 2)
-    $script:oy = [int]($H - 3 * $s - 11 * $u + $dy * $u)
+    $script:ox = [int](($W - $ANCHO * $u) / 2)
+    $script:oy = [int]($H - 3 * $s - $ALTO * $u)
     $ox = $script:ox; $oy = $script:oy
 
-    # Piernas (columnas 3, 5, 10 y 12)
-    foreach ($col in 3, 5, 10, 12) {
-        $levantada = ($piernas -eq 'pasoA' -and ($col -eq 3 -or $col -eq 10)) -or ($piernas -eq 'pasoB' -and ($col -eq 5 -or $col -eq 12))
-        if ($baja) { Pixel $col 10 1 1 $bNaranjaOsc }
-        elseif ($levantada) { Pixel $col 9 1 1 $bNaranjaOsc }
-        else { Pixel $col 9 1 2 $bNaranjaOsc }
-    }
+    foreach ($p in (Sprite $patas $ojo $boca $claro)) { Pixel $p[0] ($p[1] + $dy) $p[2] 1 $p[3] }
 
-    # Cuerpo
-    Pixel 2 (2 + $baja) 12 7 $cuerpo
-    Pixel 2 (8 + $baja) 12 1 $bNaranjaOsc
-
-    # Brazos
-    if ($brazos -eq 'arriba') {
-        Pixel 0 (1 + $baja) 2 3 $cuerpo
-        Pixel 14 (1 + $baja) 2 3 $cuerpo
-    } else {
-        Pixel 0 (4 + $baja) 2 2 $cuerpo
-        Pixel 14 (4 + $baja) 2 2 $cuerpo
-    }
-
-    # Ojos
-    $oj = 4 + $baja
-    switch ($ojos) {
-        'normal'   { Pixel 5 $oj 1 2 $bOjos; Pixel 10 $oj 1 2 $bOjos }
-        'izq'      { Pixel 4 $oj 1 2 $bOjos; Pixel 9 $oj 1 2 $bOjos }
-        'der'      { Pixel 6 $oj 1 2 $bOjos; Pixel 11 $oj 1 2 $bOjos }
-        'parpadeo' { Pixel 4 ($oj + 1) 2 1 $bOjos; Pixel 10 ($oj + 1) 2 1 $bOjos }
-        'grandes'  { Pixel 4 $oj 2 2 $bOjos; Pixel 10 $oj 2 2 $bOjos; Pixel 7 ($oj + 2) 2 1 $bOjos }
-        'felices'  {
-            Pixel 4 ($oj + 1) 1 1 $bOjos; Pixel 5 $oj 1 1 $bOjos; Pixel 6 ($oj + 1) 1 1 $bOjos
-            Pixel 9 ($oj + 1) 1 1 $bOjos; Pixel 10 $oj 1 1 $bOjos; Pixel 11 ($oj + 1) 1 1 $bOjos
-        }
-    }
-
-    # Extras de cada estado
+    # Extras de cada estado (al lado de la cabeza)
     switch ($script:estado) {
         'esperando' {
-            # Una "z" que sube despacito
-            if ($t -gt 20) {
+            if ($script:dormido) {
+                # Una "z" que sube despacito
                 $sub = ($f % 24) / 8.0
-                $zx = 16.5; $zy = 1 - $sub
+                $zx = 42; $zy = 3 - $sub
                 Pixel $zx $zy 2 0.5 $bGris
                 Pixel ($zx + 1) ($zy + 0.5) 0.5 0.5 $bGris
                 Pixel ($zx + 0.5) ($zy + 1) 0.5 0.5 $bGris
@@ -345,25 +467,79 @@ function Dibujar-Personaje($g) {
         'trabajando' {
             # Puntitos de "pensando" que se van encendiendo
             $n = ($f -shr 2) % 4
-            if ($n -ge 1) { Pixel 13 0 1 1 $bGris }
-            if ($n -ge 2) { Pixel 15 -1 1 1 $bGris }
-            if ($n -ge 3) { Pixel 17 -2 1 1 $bGris }
+            if ($n -ge 1) { Pixel 41 4 1 1 $bGris }
+            if ($n -ge 2) { Pixel 43 2 1 1 $bGris }
+            if ($n -ge 3) { Pixel 45 0 1 1 $bGris }
         }
         'aprobacion' {
-            # Signo de exclamación al costado de la cabeza
-            Pixel 17 -1 2 3 $bRojo
-            Pixel 17 3 2 1 $bRojo
+            # Signo de exclamación arriba de la cabeza
+            Pixel 43 (-2 + $dy) 2 3 $bRojo
+            Pixel 43 (2 + $dy) 2 1 $bRojo
         }
         'listo' {
             if ((($f -shr 2) % 2) -eq 0) {
-                Chispa -2 2 $bAmarillo
-                Chispa 17.5 -1 $bVerde
+                Chispa -2 8 $bAmarillo
+                Chispa 48 6 $bVerde
             } else {
-                Chispa -1.5 -1 $bVerde
-                Chispa 18 3 $bAmarillo
+                Chispa 3 3 $bVerde
+                Chispa 31 0 $bAmarillo
             }
         }
     }
+    if ($script:mimos -gt 0) { Corazon 40 (2 - (15 - $script:mimos) / 3.0) $bRosa }
+}
+
+# --- Caminar ------------------------------------------------------------------------
+# Trabajando camina decidida; esperando pasea de a ratos y después de un rato largo se
+# duerme; pidiendo permiso o cuando termina se queda quieta.
+function Mover-Mascota {
+    $script:moviendo = $false
+    if ($script:mimos -gt 0) { $script:mimos--; return }
+    $t = $script:frame - $script:inicioFrame
+    $script:dormido = ($script:estado -eq 'esperando' -and $t -gt 1200)
+    if (-not $script:config.caminar -or $script:arrastrando -or $menu.Visible) { return }
+
+    $vel = 0
+    switch ($script:estado) {
+        'trabajando' { $vel = 3 }
+        'esperando' {
+            if ($script:dormido) { }
+            elseif ($script:paseo -gt 0) {
+                $script:paseo--
+                $vel = 2
+                if ($script:paseo -eq 0) { $script:descanso = $script:rnd.Next(40, 150) }
+            } elseif ($script:descanso -gt 0) {
+                $script:descanso--
+                if ($script:descanso -eq 0) {
+                    $script:paseo = $script:rnd.Next(20, 80)
+                    if ($script:rnd.Next(3) -eq 0) { $script:dir = -$script:dir }
+                }
+            }
+        }
+    }
+    if ($vel -eq 0) { return }
+
+    $area = [System.Windows.Forms.Screen]::FromControl($form).WorkingArea
+    $paso = [int][Math]::Max(1, [Math]::Round($vel * $s))
+    $x = $form.Left + $script:dir * $paso
+    if ($x -lt $area.Left) { $x = $area.Left; $script:dir = 1 }
+    elseif ($x -gt $area.Right - $W) { $x = $area.Right - $W; $script:dir = -1 }
+    $form.Left = $x
+    $script:moviendo = $true
+    $script:espejo = ($script:dir -lt 0)
+}
+
+# Doble clic: trae al frente la ventana donde está corriendo Claude Code.
+function Traer-Claude {
+    $ventana = Get-Process | Where-Object {
+        $_.Id -ne $PID -and $_.MainWindowHandle -ne [IntPtr]::Zero -and $_.MainWindowTitle -match 'Claude Code'
+    } | Select-Object -First 1
+    if (-not $ventana) {
+        $script:texto = "No encuentro Claude Code"
+        return
+    }
+    if ([MascotaNativo]::IsIconic($ventana.MainWindowHandle)) { [void][MascotaNativo]::ShowWindow($ventana.MainWindowHandle, 9) }
+    [void][MascotaNativo]::SetForegroundWindow($ventana.MainWindowHandle)
 }
 
 # --- Ventana ----------------------------------------------------------------------
@@ -397,26 +573,35 @@ $form.Add_Paint({
 # Arrastrar con el botón izquierdo
 $script:arrastrando = $false
 $script:agarre = $null
+$script:inicioClic = $null
+$script:movido = $false
 $form.Add_MouseDown({
     param($origen, $ev)
     if ($ev.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
         $script:arrastrando = $true
+        $script:movido = $false
         $cur = [System.Windows.Forms.Cursor]::Position
+        $script:inicioClic = $cur
         $script:agarre = New-Object System.Drawing.Point(($cur.X - $form.Left), ($cur.Y - $form.Top))
     }
 })
 $form.Add_MouseMove({
     if ($script:arrastrando) {
         $cur = [System.Windows.Forms.Cursor]::Position
-        $form.Location = New-Object System.Drawing.Point(($cur.X - $script:agarre.X), ($cur.Y - $script:agarre.Y))
+        if ([Math]::Abs($cur.X - $script:inicioClic.X) + [Math]::Abs($cur.Y - $script:inicioClic.Y) -gt 4) { $script:movido = $true }
+        if ($script:movido) {
+            $form.Location = New-Object System.Drawing.Point(($cur.X - $script:agarre.X), ($cur.Y - $script:agarre.Y))
+        }
     }
 })
 $form.Add_MouseUp({
     if ($script:arrastrando) {
         $script:arrastrando = $false
-        Guardar-Config
+        if ($script:movido) { Guardar-Config }
+        else { $script:mimos = 15 }      # un clic sin arrastrar: mimos
     }
 })
+$form.Add_DoubleClick({ Traer-Claude })
 
 # Menú de clic derecho
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
@@ -432,6 +617,17 @@ $itemSonido.Add_Click({
     if ($itemSonido.Checked -and $script:sonido) { try { $script:sonido.Play() } catch { } }
 })
 [void]$menu.Items.Add($itemSonido)
+$itemCaminar = New-Object System.Windows.Forms.ToolStripMenuItem('Caminar por la pantalla')
+$itemCaminar.CheckOnClick = $true
+$itemCaminar.Checked = [bool]$script:config.caminar
+$itemCaminar.Add_Click({
+    $script:config.caminar = $itemCaminar.Checked
+    Guardar-Config
+})
+[void]$menu.Items.Add($itemCaminar)
+$itemClaude = New-Object System.Windows.Forms.ToolStripMenuItem('Mostrar Claude Code (doble clic)')
+$itemClaude.Add_Click({ Traer-Claude })
+[void]$menu.Items.Add($itemClaude)
 $itemEsquina = New-Object System.Windows.Forms.ToolStripMenuItem('Volver a la esquina')
 $itemEsquina.Add_Click({
     $script:config.x = $null; $script:config.y = $null
@@ -452,6 +648,9 @@ $timer.Add_Tick({
     try {
         $script:frame++
         if (($script:frame % 3) -eq 0) { Leer-Estado $false; Revisar-Vencimientos }
+        Mover-Mascota
+        # Mientras camina, guardamos la posición cada 30 segundos
+        if (($script:frame % 300) -eq 0 -and $script:config.caminar) { Guardar-Config }
         # Cada tanto reafirmamos "siempre visible" (algunas apps a pantalla completa lo pisan)
         if (($script:frame % 50) -eq 0 -and -not $menu.Visible) { $form.TopMost = $true }
         $form.Invalidate()

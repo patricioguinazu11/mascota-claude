@@ -1,8 +1,8 @@
 # Mascota de Claude Code para Windows
 
-Un bichito pixel-art que vive en una esquina de tu escritorio y te muestra qué está haciendo Claude Code: si está esperando, trabajando, si necesita tu permiso (salta, se pone rojo y suena un "din-don") o si ya terminó.
+Una bestia pixel-art que pasea por tu escritorio y te muestra qué está haciendo Claude Code: si está esperando (pasea y después de un rato se duerme), trabajando (camina decidida), si necesita tu permiso (salta con la boca abierta, parpadea y suena un "din-don") o si ya terminó (festeja).
 
-![Los 4 estados de la mascota](docs/estados.png)
+![Los estados de la mascota](docs/estados.png)
 
 Funciona solo con Windows PowerShell y .NET, que ya vienen con Windows, así que no hace falta instalar nada.
 
@@ -17,9 +17,13 @@ La mascota aparece abajo a la derecha y a partir de ahí arranca sola cada vez q
 
 ## Uso
 
-- **Arrastrala** con el botón izquierdo a donde quieras: se acuerda de la posición.
-- **Clic derecho** para prender o apagar el sonido, devolverla a la esquina o cerrarla.
+- **Arrastrala** con el botón izquierdo a donde quieras: camina a lo largo de esa altura y se acuerda de la posición.
+- **Un clic** le da mimos. **Doble clic** trae al frente la ventana de Claude Code (útil cuando pide permiso).
+- **Clic derecho** para prender o apagar el sonido, activar o desactivar la caminata, devolverla a la esquina o cerrarla.
 - Si pasás el mouse por encima, te dice en qué proyecto está trabajando Claude.
+- Claude Code tiene que estar abierto en una carpeta de proyecto (no en tu carpeta de usuario) para que la mascota se entere de lo que hace.
+
+Para cambiarle el diseño, editá el dibujo en `src/mascota.ps1` (sección *Personaje*): cada letra es un color y hay un cuadro por pose de caminata.
 
 ## Desinstalación
 
