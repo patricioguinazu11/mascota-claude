@@ -146,7 +146,52 @@ if (-not $h) {
     Probar-Hook 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', "`"$hookPs`"", 'PreToolUse') 'Hook directo con PowerShell'
 }
 
-Titulo '5. Estado actual y registro del hook'
+Titulo '5. Políticas de la organización (pueden bloquear hooks personales)'
+$politicas = @()
+$archivoPol = Join-Path $env:ProgramFiles 'ClaudeCode\managed-settings.json'
+if (Test-Path $archivoPol) { $politicas += [pscustomobject]@{ Origen = $archivoPol; Texto = (Get-Content $archivoPol -Raw) } }
+$dirPol = Join-Path $env:ProgramFiles 'ClaudeCode\managed-settings.d'
+if (Test-Path $dirPol) { Get-ChildItem $dirPol -Filter *.json | ForEach-Object { $politicas += [pscustomobject]@{ Origen = $_.FullName; Texto = (Get-Content $_.FullName -Raw) } } }
+foreach ($clave in 'HKLM:\SOFTWARE\Policies\ClaudeCode', 'HKCU:\SOFTWARE\Policies\ClaudeCode') {
+    try { $v = (Get-ItemProperty -Path $clave -Name Settings -ErrorAction Stop).Settings; if ($v) { $politicas += [pscustomobject]@{ Origen = "$clave\Settings"; Texto = [string]$v } } } catch { }
+}
+if (-not $politicas) {
+    Ok 'No hay políticas de Claude Code en este equipo (archivo ni registro).'
+} else {
+    foreach ($pol in $politicas) {
+        Info "Política encontrada: $($pol.Origen)"
+        if ($pol.Texto -match '"allowManagedHooksOnly"\s*:\s*true') { Mal '  allowManagedHooksOnly = true : la organización solo permite SUS hooks, los tuyos no corren.' }
+        if ($pol.Texto -match '"disableAllHooks"\s*:\s*true') { Mal '  disableAllHooks = true : la organización desactivó todos los hooks.' }
+        if ($pol.Texto -notmatch 'allowManagedHooksOnly|disableAllHooks') { Info '  (no menciona hooks)' }
+    }
+}
+Info 'La organización también puede mandar configuración desde claude.ai: en Claude Code escribí /status y fijate la línea "Setting sources".'
+
+Titulo '6. Prueba real con Claude Code'
+if (-not $claude) {
+    Info 'No encontré el comando claude: salteo esta prueba.'
+} else {
+    $logH = Join-Path $destino 'hook.log'
+    $antes = if (Test-Path $logH) { @(Get-Content $logH -Encoding UTF8).Count } else { 0 }
+    Info 'Le hago a Claude Code una pregunta cortita (claude -p), puede tardar hasta un minuto...'
+    Push-Location $env:TEMP
+    try {
+        $respuesta = & $claude.Source -p 'Respondé solamente la palabra OK' 2>&1 | Select-Object -First 5
+        Info ("Respuesta de Claude: {0}" -f (($respuesta | Out-String).Trim()))
+    } catch { Mal "No pude ejecutar claude: $_" }
+    Pop-Location
+    Start-Sleep -Seconds 8   # los hooks corren en segundo plano
+    $lineas = if (Test-Path $logH) { @(Get-Content $logH -Encoding UTF8) } else { @() }
+    $nuevas = if ($lineas.Count -gt $antes) { $lineas[$antes..($lineas.Count - 1)] } else { @() }
+    if ($nuevas) {
+        Ok 'Claude Code SÍ llamó al hook:'
+        $nuevas | ForEach-Object { Info "  $_" }
+    } else {
+        Mal 'Claude Code respondió pero NO llamó al hook.'
+    }
+}
+
+Titulo '7. Estado actual y registro del hook'
 if (Test-Path $estado) {
     Info ("estado.json ({0:HH:mm:ss}): {1}" -f (Get-Item $estado).LastWriteTime, (Get-Content $estado -Raw -Encoding UTF8))
 } else { Mal 'No existe estado.json: ningún hook llegó a escribir nunca.' }
