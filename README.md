@@ -1,15 +1,46 @@
-# mascota-claude
-Creá una mascota de escritorio para Windows que me muestre qué está haciendo Claude Code en mi PC.
+# Mascota de Claude Code para Windows
 
-Requisitos:
-- Ventana chica, sin bordes, siempre visible, fondo transparente, que pueda arrastrar con el mouse y que recuerde su posición.
-- Personaje animado simple con 4 estados: "esperando", "pensando/trabajando", "necesita mi aprobación" (llamativo, con sonido corto opcional) y "listo".
-- Un globito de texto corto con lo que está pasando (ej: "Editando archivo…", "Terminé", "Necesito tu permiso").
-- Conectala a los hooks de Claude Code (UserPromptSubmit, PreToolUse, Notification, Stop) en mi settings.json de usuario (%USERPROFILE%\.claude\settings.json), sin borrar lo que ya haya ahí.
-- Sin instalar programas pesados: usá PowerShell/.NET que ya trae Windows.
-- Que arranque sola al iniciar Windows y se pueda cerrar con clic derecho.
+Un bichito pixel-art que vive en una esquina de tu escritorio y te muestra qué está haciendo Claude Code: si está esperando, trabajando, si necesita tu permiso (salta, se pone rojo y suena un "din-don") o si ya terminó.
 
-Estás en la nube, así que:
-- Dejá todo guardado en este repositorio.
-- Incluí un instalar.ps1 que yo ejecute una vez en mi PC para copiar los archivos, configurar los hooks y dejarla andando, y un desinstalar.ps1.
-- Incluí un README corto en español con los pasos para instalarla.
+![Los 4 estados de la mascota](docs/estados.png)
+
+Funciona solo con Windows PowerShell y .NET, que ya vienen con Windows, así que no hace falta instalar nada.
+
+## Instalación
+
+1. Bajá el repositorio a tu PC: en GitHub, **Code → Download ZIP** y descomprimilo, o `git clone https://github.com/patricioguinazu11/mascota-claude.git`.
+2. Hacé doble clic en **`instalar.bat`**. Si Windows muestra "Windows protegió su PC", tocá *Más información → Ejecutar de todas formas*.
+   (Alternativa desde PowerShell: `powershell -ExecutionPolicy Bypass -File .\instalar.ps1`.)
+3. Si tenías Claude Code abierto, cerralo y volvelo a abrir para que tome los hooks.
+
+La mascota aparece abajo a la derecha y a partir de ahí arranca sola cada vez que prendés la PC.
+
+## Uso
+
+- **Arrastrala** con el botón izquierdo a donde quieras: se acuerda de la posición.
+- **Clic derecho** para prender o apagar el sonido, devolverla a la esquina o cerrarla.
+- Si pasás el mouse por encima, te dice en qué proyecto está trabajando Claude.
+
+## Desinstalación
+
+Doble clic en **`desinstalar.bat`** (o `powershell -ExecutionPolicy Bypass -File .\desinstalar.ps1`).
+
+También queda una copia en `%LOCALAPPDATA%\ClaudeMascota\desinstalar.ps1`. Cierra la mascota, quita solo sus hooks del `settings.json`, borra el acceso directo de Inicio y la carpeta instalada.
+
+## Qué toca en tu PC
+
+| Qué | Dónde |
+| --- | --- |
+| Archivos de la mascota | `%LOCALAPPDATA%\ClaudeMascota` |
+| Hooks de Claude Code | `%USERPROFILE%\.claude\settings.json` (antes de modificarlo deja una copia `settings.json.bak-mascota-FECHA`) |
+| Arranque con Windows | Acceso directo `Mascota Claude` en la carpeta Inicio |
+
+Los hooks que agrega son `UserPromptSubmit`, `PreToolUse`, `PostToolUse` (para salir del estado de "permiso" cuando aprobás), `Notification`, `Stop` y `SessionEnd`. Corren en segundo plano (`"async": true`), así que no frenan a Claude; solo `Stop` corre en primer plano (demora medio segundo al final de cada respuesta) porque en segundo plano no se ejecutaba. Todo lo demás que tengas en `settings.json` queda igual.
+
+## Si algo no anda
+
+Primero hacé doble clic en **`diagnosticar.bat`**: revisa la instalación, los hooks y simula un aviso de Claude Code. Cada llamada de Claude a la mascota queda anotada en `%LOCALAPPDATA%\ClaudeMascota\hook.log`.
+
+- **No cambia de estado:** abrí Claude Code en una carpeta de proyecto y aceptá que confiás en ella (los hooks no corren en carpetas no confiables, y tu carpeta de usuario puede no quedar marcada como confiable); reiniciá Claude Code y fijate que en `settings.json` estén los hooks que apuntan a `ClaudeMascota/hook.ps1`.
+- **No aparece:** abrila a mano con `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\ClaudeMascota\mascota.ps1"` y mirá si hay errores en `%LOCALAPPDATA%\ClaudeMascota\mascota.log`.
+- **Quedó en un estado viejo** (por ejemplo, si cortaste a Claude con Esc): vuelve sola a "esperando" a los pocos minutos, o con el próximo mensaje que le mandes.
