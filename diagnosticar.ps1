@@ -8,6 +8,10 @@ if ($PSVersionTable.PSEdition -eq 'Core') {
     exit $LASTEXITCODE
 }
 
+# Todo lo que se muestra queda guardado en un archivo que se abre al final en el Bloc de notas.
+$reporte = Join-Path $env:TEMP 'diagnostico-mascota.txt'
+try { Start-Transcript -LiteralPath $reporte -Force | Out-Null } catch { $reporte = $null }
+
 $destino  = Join-Path $env:LOCALAPPDATA 'ClaudeMascota'
 $settings = Join-Path $env:USERPROFILE '.claude\settings.json'
 $estado   = Join-Path $destino 'estado.json'
@@ -148,4 +152,8 @@ if (Test-Path $logM) {
 }
 
 Write-Host ''
-Write-Host 'Listo. Copiá todo este texto y mandáselo a Claude.' -ForegroundColor Cyan
+Write-Host 'Listo. Se abre el Bloc de notas con este resultado: Ctrl+A, Ctrl+C y pegáselo a Claude.' -ForegroundColor Cyan
+if ($reporte) {
+    try { Stop-Transcript | Out-Null } catch { }
+    Start-Process notepad.exe -ArgumentList "`"$reporte`""
+}
