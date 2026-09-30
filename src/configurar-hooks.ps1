@@ -151,7 +151,9 @@ if ($Accion -eq 'Agregar') {
     foreach ($ev in $eventos.Keys) {
         $argumentos = New-Object System.Collections.ArrayList
         foreach ($a in '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $RutaHook, $ev) { [void]$argumentos.Add($a) }
-        $entrada = [ordered]@{ type = 'command'; command = 'powershell.exe'; args = $argumentos; async = $true }
+        $entrada = [ordered]@{ type = 'command'; command = 'powershell.exe'; args = $argumentos }
+        # Stop corre en primer plano: en segundo plano Claude Code no llegaba a ejecutarlo.
+        if ($ev -eq 'Stop') { $entrada['timeout'] = 10 } else { $entrada['async'] = $true }
         $grupo = [ordered]@{}
         if ($eventos[$ev]) { $grupo['matcher'] = '*' }
         $grupo['hooks'] = New-Object System.Collections.ArrayList

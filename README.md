@@ -35,12 +35,12 @@ También queda una copia en `%LOCALAPPDATA%\ClaudeMascota\desinstalar.ps1`. Cier
 | Hooks de Claude Code | `%USERPROFILE%\.claude\settings.json` (antes de modificarlo deja una copia `settings.json.bak-mascota-FECHA`) |
 | Arranque con Windows | Acceso directo `Mascota Claude` en la carpeta Inicio |
 
-Los hooks que agrega son `UserPromptSubmit`, `PreToolUse`, `PostToolUse` (para salir del estado de "permiso" cuando aprobás), `Notification`, `Stop` y `SessionEnd`. Corren en segundo plano (`"async": true`), así que no frenan a Claude. Todo lo demás que tengas en `settings.json` queda igual.
+Los hooks que agrega son `UserPromptSubmit`, `PreToolUse`, `PostToolUse` (para salir del estado de "permiso" cuando aprobás), `Notification`, `Stop` y `SessionEnd`. Corren en segundo plano (`"async": true`), así que no frenan a Claude; solo `Stop` corre en primer plano (demora medio segundo al final de cada respuesta) porque en segundo plano no se ejecutaba. Todo lo demás que tengas en `settings.json` queda igual.
 
 ## Si algo no anda
 
 Primero hacé doble clic en **`diagnosticar.bat`**: revisa la instalación, los hooks y simula un aviso de Claude Code. Cada llamada de Claude a la mascota queda anotada en `%LOCALAPPDATA%\ClaudeMascota\hook.log`.
 
-- **No cambia de estado:** reiniciá Claude Code y fijate que en `settings.json` estén los hooks que apuntan a `ClaudeMascota/hook.ps1`.
+- **No cambia de estado:** abrí Claude Code en una carpeta de proyecto y aceptá que confiás en ella (los hooks no corren en carpetas no confiables, y tu carpeta de usuario puede no quedar marcada como confiable); reiniciá Claude Code y fijate que en `settings.json` estén los hooks que apuntan a `ClaudeMascota/hook.ps1`.
 - **No aparece:** abrila a mano con `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\ClaudeMascota\mascota.ps1"` y mirá si hay errores en `%LOCALAPPDATA%\ClaudeMascota\mascota.log`.
 - **Quedó en un estado viejo** (por ejemplo, si cortaste a Claude con Esc): vuelve sola a "esperando" a los pocos minutos, o con el próximo mensaje que le mandes.
